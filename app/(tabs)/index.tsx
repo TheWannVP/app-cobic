@@ -15,7 +15,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { Logo } from '@/components/ui/Logo';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { miningService } from '@/services/mining.service';
+import { miningService, DailyCheckInResult, DailyCheckInError } from '@/services/mining.service';
+import { useFocusEffect } from '@react-navigation/native';
 
 // Định nghĩa kiểu dữ liệu cho stats
 interface SystemStats {
@@ -47,6 +48,8 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const [miningStatus, setMiningStatus] = useState<MiningStatus | null>(null);
   const [timeLeft, setTimeLeft] = useState<string>('');
+  const [isFetching, setIsFetching] = useState(false);
+  const [hasFetchedWhenZero, setHasFetchedWhenZero] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -84,6 +87,15 @@ export default function HomeScreen() {
     }
   }, [isAuthenticated]);
 
+  // Thêm useFocusEffect để fetch mining status khi focus vào tab
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isAuthenticated) {
+        fetchMiningStatus();
+      }
+    }, [isAuthenticated])
+  );
+
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg']
@@ -118,20 +130,61 @@ export default function HomeScreen() {
   };
 
   const handleDailyCheckIn = async () => {
-    if (!isAuthenticated) {
-      router.push('/login');
-      return;
-    }
-
     try {
       setLoading(true);
       const result = await miningService.checkIn();
-      console.log('Check-in result:', result);
-      Alert.alert('Thành công', `Bạn đã nhận được ${result.amount} COBIC!`);
-      fetchUserInfo(); // Cập nhật lại thông tin người dùng
+      Alert.alert(
+        'Thành công',
+        `${result.message}\n\nNhận được: ${result.reward} COBIC\nSố dư mới: ${result.newBalance} COBIC`,
+        [
+          {
+            text: 'OK',
+            onPress: async () => {
+              await fetchMiningStatus(); // Cập nhật lại trạng thái mining
+              await fetchUserInfo(); // Cập nhật lại thông tin người dùng và số dư
+            }
+          }
+        ]
+      );
     } catch (error: any) {
       console.error('Check-in error:', error);
-      Alert.alert('Lỗi', error.response?.data?.message || 'Điểm danh thất bại. Vui lòng thử lại.');
+      console.error('Check-in error response:', error.response?.data);
+      
+      if (error.response) {
+        switch (error.response.status) {
+          case 400:
+            const errorData = error.response.data as DailyCheckInError;
+            Alert.alert(
+              'Không thể điểm danh', 
+              `Điểm danh thất bại vì đã điểm danh trong 24 giờ qua.\nCòn ${errorData.remainingHours} giờ nữa có thể điểm danh lại.`
+            );
+            break;
+          case 401:
+            Alert.alert(
+              'Không được xác thực', 
+              'Vui lòng đăng nhập lại để tiếp tục.',
+              [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    logout();
+                  }
+                }
+              ]
+            );
+            break;
+          case 500:
+            Alert.alert(
+              'Lỗi máy chủ', 
+              'Máy chủ đang gặp sự cố. Vui lòng thử lại sau.'
+            );
+            break;
+          default:
+            Alert.alert('Lỗi', error.response?.data?.message || 'Điểm danh thất bại. Vui lòng thử lại.');
+        }
+      } else {
+        Alert.alert('Lỗi kết nối', 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.');
+      }
     } finally {
       setLoading(false);
     }
@@ -223,36 +276,51 @@ export default function HomeScreen() {
   };
 
   const fetchMiningStatus = async () => {
+    if (isFetching) return;
+    setIsFetching(true);
     try {
       const status = await miningService.getMiningStatus();
       setMiningStatus(status);
+      if (status.nextMiningTime) {
+        const now = new Date();
+        const nextTime = new Date(status.nextMiningTime);
+        const diff = nextTime.getTime() - now.getTime();
+        if (diff > 0) {
+          setTimeLeft(formatTimeLeft(diff));
+        } else {
+          setTimeLeft('');
+        }
+      }
     } catch (error) {
       console.error('Error fetching mining status:', error);
+    } finally {
+      setIsFetching(false);
     }
+  };
+
+  const formatTimeLeft = (diff: number) => {
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
-    if (miningStatus?.nextMiningTime) {
-      const updateTimeLeft = () => {
+    if (timeLeft) {
+      interval = setInterval(() => {
         const now = new Date();
-        const nextTime = new Date(miningStatus.nextMiningTime);
+        const nextTime = new Date(miningStatus?.nextMiningTime || '');
         const diff = nextTime.getTime() - now.getTime();
         
         if (diff <= 0) {
           setTimeLeft('');
-          fetchMiningStatus();
+          clearInterval(interval);
         } else {
-          const hours = Math.floor(diff / (1000 * 60 * 60));
-          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-          setTimeLeft(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+          setTimeLeft(formatTimeLeft(diff));
         }
-      };
-      
-      updateTimeLeft();
-      interval = setInterval(updateTimeLeft, 1000);
+      }, 1000);
     }
     
     return () => {
@@ -260,7 +328,7 @@ export default function HomeScreen() {
         clearInterval(interval);
       }
     };
-  }, [miningStatus]);
+  }, [timeLeft, miningStatus?.nextMiningTime]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>

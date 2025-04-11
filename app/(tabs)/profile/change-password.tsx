@@ -22,6 +22,11 @@ export default function ChangePasswordScreen() {
       return;
     }
 
+    if (newPassword.length < 6) {
+      Alert.alert('Lỗi', 'Mật khẩu mới phải có ít nhất 6 ký tự');
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       Alert.alert('Lỗi', 'Mật khẩu mới không khớp');
       return;
@@ -29,19 +34,27 @@ export default function ChangePasswordScreen() {
 
     try {
       setChangePasswordLoading(true);
-      await userService.changePassword(currentPassword, newPassword);
-      Alert.alert('Thành công', 'Đổi mật khẩu thành công', [
-        { text: 'OK', onPress: () => router.back() } // Quay lại trang trước sau khi thành công
-      ]);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+      const response = await userService.changePassword(currentPassword, newPassword);
+      if (response.success) {
+        Alert.alert('Thành công', response.message, [
+          { text: 'OK', onPress: () => router.back() }
+        ]);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        Alert.alert('Lỗi', 'Đổi mật khẩu thất bại');
+      }
     } catch (error: any) {
       Alert.alert('Lỗi', error.response?.data?.message || 'Đổi mật khẩu thất bại');
     } finally {
       setChangePasswordLoading(false);
     }
   };
+
+  const inputBackgroundColor = Colors[colorScheme === 'dark' ? 'dark' : 'light'].inputBackground;
+  const inputTextColor = Colors[colorScheme === 'dark' ? 'dark' : 'light'].text;
+  const inputPlaceholderColor = Colors[colorScheme === 'dark' ? 'dark' : 'light'].icon;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -56,12 +69,12 @@ export default function ChangePasswordScreen() {
             <ThemedText style={styles.label}>Mật khẩu hiện tại</ThemedText>
             <TextInput
               style={[styles.input, {
-                backgroundColor: Colors[colorScheme ?? 'light'].inputBackground,
+                backgroundColor: inputBackgroundColor,
                 borderColor: colorScheme === 'dark' ? '#666' : '#E5E7EB',
-                color: Colors[colorScheme ?? 'light'].text
+                color: inputTextColor
               }]}
               placeholder="Nhập mật khẩu hiện tại"
-              placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
+              placeholderTextColor={inputPlaceholderColor}
               value={currentPassword}
               onChangeText={setCurrentPassword}
               secureTextEntry
@@ -70,12 +83,12 @@ export default function ChangePasswordScreen() {
             <ThemedText style={styles.label}>Mật khẩu mới</ThemedText>
             <TextInput
               style={[styles.input, {
-                backgroundColor: Colors[colorScheme ?? 'light'].inputBackground,
+                backgroundColor: inputBackgroundColor,
                 borderColor: colorScheme === 'dark' ? '#666' : '#E5E7EB',
-                color: Colors[colorScheme ?? 'light'].text
+                color: inputTextColor
               }]}
               placeholder="Nhập mật khẩu mới"
-              placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
+              placeholderTextColor={inputPlaceholderColor}
               value={newPassword}
               onChangeText={setNewPassword}
               secureTextEntry
@@ -84,12 +97,12 @@ export default function ChangePasswordScreen() {
             <ThemedText style={styles.label}>Xác nhận mật khẩu mới</ThemedText>
             <TextInput
               style={[styles.input, {
-                backgroundColor: Colors[colorScheme ?? 'light'].inputBackground,
+                backgroundColor: inputBackgroundColor,
                 borderColor: colorScheme === 'dark' ? '#666' : '#E5E7EB',
-                color: Colors[colorScheme ?? 'light'].text
+                color: inputTextColor
               }]}
               placeholder="Nhập lại mật khẩu mới"
-              placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
+              placeholderTextColor={inputPlaceholderColor}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry

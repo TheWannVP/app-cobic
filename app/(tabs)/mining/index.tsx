@@ -2,7 +2,7 @@ import { StyleSheet, TouchableOpacity, Alert, View, ScrollView } from 'react-nat
 import { ThemedText } from '@components/ThemedText';
 import { ThemedView } from '@components/ThemedView';
 import { useColorScheme } from '@hooks/useColorScheme';
-import { miningService, MiningStatus, MiningResult, MiningStats, DailyCheckInResult } from '@services/mining.service';
+import { miningService, MiningStatus, MiningResult, MiningStats, DailyCheckInResult, DailyCheckInError } from '@services/mining.service';
 import { useEffect, useState, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@constants/Colors';
@@ -10,6 +10,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { userService } from '@services/user.service';
 
 export default function MiningScreen() {
   const colorScheme = useColorScheme();
@@ -19,6 +21,7 @@ export default function MiningScreen() {
   const [miningResult, setMiningResult] = useState<MiningResult | null>(null);
   const [checkInResult, setCheckInResult] = useState<DailyCheckInResult | null>(null);
   const [timeLeft, setTimeLeft] = useState<string>('');
+  const [hasFetchedWhenZero, setHasFetchedWhenZero] = useState(false);
   const timerRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
@@ -29,6 +32,13 @@ export default function MiningScreen() {
       }
     };
   }, []);
+
+  // Thêm useFocusEffect để fetch mining data khi focus vào tab
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchMiningData();
+    }, [])
+  );
 
   useEffect(() => {
     if (miningStatus?.nextMiningTime) {
@@ -53,8 +63,12 @@ export default function MiningScreen() {
       
       if (diff <= 0) {
         setTimeLeft('');
-        fetchMiningData(); // Cập nhật lại trạng thái khi hết thời gian chờ
+        if (!hasFetchedWhenZero) {
+          setHasFetchedWhenZero(true);
+          fetchMiningData(); // Cập nhật lại trạng thái khi hết thời gian chờ
+        }
       } else {
+        setHasFetchedWhenZero(false);
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((diff % (1000 * 60)) / 1000);
@@ -186,27 +200,31 @@ export default function MiningScreen() {
       setCheckInResult(result);
       Alert.alert(
         'Thành công',
-        `Đã check-in thành công!\n\nNhận được: ${result.amount} COBIC\nSố dư mới: ${result.balance} COBIC`,
+        `${result.message}\n\nNhận được: ${result.reward} COBIC\nSố dư mới: ${result.newBalance} COBIC`,
         [
           {
             text: 'OK',
-            onPress: () => {
-              fetchMiningData(); // Cập nhật lại dữ liệu mining
+            onPress: async () => {
+              await fetchMiningData(); // Cập nhật lại dữ liệu mining
+              await userService.getUser(); // Cập nhật lại thông tin người dùng và số dư
             }
           }
         ]
       );
     } catch (error: any) {
       console.error('Check-in error:', error);
+      console.error('Check-in error response:', error.response?.data);
       
       // Xử lý các mã lỗi cụ thể
       if (error.response) {
         switch (error.response.status) {
           case 400:
+            const errorData = error.response.data as DailyCheckInError;
             Alert.alert(
               'Không thể điểm danh', 
-              'Điểm danh thất bại vì đã điểm danh trong 24 giờ qua. Vui lòng quay lại sau.'
+              `Điểm danh thất bại vì đã điểm danh trong 24 giờ qua.\nCòn ${errorData.remainingHours} giờ nữa có thể điểm danh lại.`
             );
+            // Không gọi fetchMiningData ngay lập tức khi gặp lỗi 400
             break;
           case 401:
             Alert.alert(
@@ -236,8 +254,12 @@ export default function MiningScreen() {
         Alert.alert('Lỗi kết nối', 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.');
       }
       
-      // Cập nhật lại trạng thái mining sau khi gặp lỗi
-      fetchMiningData();
+      // Chỉ gọi fetchMiningData sau 2 giây nếu không phải lỗi 400
+      if (error.response?.status !== 400) {
+        setTimeout(() => {
+          fetchMiningData();
+        }, 2000);
+      }
     } finally {
       setLoading(false);
     }

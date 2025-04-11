@@ -24,8 +24,17 @@ export interface MiningStats {
 }
 
 export interface DailyCheckInResult {
-  amount: string;
-  balance: string;
+  success: boolean;
+  message: string;
+  reward: string;
+  nextCheckInTime: string;
+  newBalance: string;
+}
+
+export interface DailyCheckInError {
+  error: string;
+  nextCheckInTime: string;
+  remainingHours: string;
 }
 
 export const miningService = {
@@ -40,12 +49,13 @@ export const miningService = {
   },
 
   getMiningStats: async (): Promise<MiningStats> => {
+    console.log('getMiningStats called');
     const response = await api.get('/mining/stats');
     return response.data;
   },
 
   checkIn: async (): Promise<DailyCheckInResult> => {
-    const response = await api.post('/mining/check-in');
+    const response = await api.post('/mining/daily-check-in');
     return response.data;
   }
 }; 
