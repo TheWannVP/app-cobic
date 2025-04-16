@@ -11,6 +11,8 @@ import { router } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { userService } from '@/services/user.service';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+import React from 'react';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
@@ -68,6 +70,31 @@ export default function ProfileScreen() {
 
     fetchUser();
   }, [isLoggingOut, shouldRender]);
+
+  // Thêm useFocusEffect để fetch dữ liệu mới nhất khi vào lại trang
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!isLoggingOut && shouldRender) {
+        const fetchUser = async () => {
+          try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
+
+            console.log('Fetching latest user info');
+            const userData = await authService.getMe();
+            if (userData) {
+              setUser(userData);
+              setUserInfo(userData);
+            }
+          } catch (error) {
+            console.error('Error fetching latest user info:', error);
+          }
+        };
+
+        fetchUser();
+      }
+    }, [isLoggingOut, shouldRender])
+  );
 
   const handleLogout = async () => {
     if (isLoggingOut) return;

@@ -35,8 +35,8 @@ export default function ChangePasswordScreen() {
     try {
       setChangePasswordLoading(true);
       const response = await userService.changePassword(currentPassword, newPassword);
-      if (response.success) {
-        Alert.alert('Thành công', response.message, [
+      if (response && response.id) {
+        Alert.alert('Thành công', 'Đổi mật khẩu thành công', [
           { text: 'OK', onPress: () => router.back() }
         ]);
         setCurrentPassword('');
@@ -46,6 +46,7 @@ export default function ChangePasswordScreen() {
         Alert.alert('Lỗi', 'Đổi mật khẩu thất bại');
       }
     } catch (error: any) {
+      console.error('Change password error:', error);
       Alert.alert('Lỗi', error.response?.data?.message || 'Đổi mật khẩu thất bại');
     } finally {
       setChangePasswordLoading(false);

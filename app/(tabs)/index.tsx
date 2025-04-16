@@ -53,7 +53,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      fetchUserInfo();
+      fetchMiningStatus();
     }
   }, [isAuthenticated]);
 
@@ -81,13 +81,7 @@ export default function HomeScreen() {
     ).start();
   }, []);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchMiningStatus();
-    }
-  }, [isAuthenticated]);
-
-  // Thêm useFocusEffect để fetch mining status khi focus vào tab
+  // Thêm useFocusEffect để fetch dữ liệu mới nhất khi vào lại trang
   useFocusEffect(
     React.useCallback(() => {
       if (isAuthenticated) {
@@ -103,17 +97,12 @@ export default function HomeScreen() {
 
   const fetchUserInfo = async () => {
     try {
-      setLoading(true);
-      const response = await authService.getMe();
-      setUserInfo(response);
+      const userData = await userService.getUser();
+      if (userData) {
+        setUserInfo(userData);
+      }
     } catch (error) {
       console.error('Error fetching user info:', error);
-      if ((error as any).response?.status === 401) {
-        await logout();
-        Alert.alert('Phiên đăng nhập hết hạn', 'Vui lòng đăng nhập lại.');
-      }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -363,15 +352,15 @@ export default function HomeScreen() {
             {isAuthenticated ? (
               <View style={styles.userInfoContainer}> 
                 {/* Phần chào */}
-                <ThemedText style={styles.userName}>Xin chào, {userInfo?.username || user?.username}</ThemedText>
-                <ThemedText style={styles.userEmail}>{userInfo?.email || 'Chưa cập nhật email'}</ThemedText>
+                <ThemedText style={styles.userName}>Xin chào, {user?.username}</ThemedText>
+                <ThemedText style={styles.userEmail}>{user?.email || 'Chưa cập nhật email'}</ThemedText>
 
                 {/* Số dư nổi bật */}
                 <View style={styles.balanceContainer}>
                   <IconSymbol name="creditcard.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
                   <View style={styles.balanceTextContainer}>
                     <ThemedText style={styles.balanceLabel}>Số dư chính</ThemedText>
-                    <ThemedText style={styles.balanceValue}>{userInfo?.balance || '0.00'}</ThemedText>
+                    <ThemedText style={styles.balanceValue}>{user?.balance || '0.00'}</ThemedText>
                   </View>
                 </View>
 
@@ -382,7 +371,7 @@ export default function HomeScreen() {
                     <IconSymbol name="bolt.fill" size={18} color={Colors[colorScheme ?? 'light'].icon} />
                     <View>
                       <ThemedText style={styles.secondaryInfoLabel}>Tốc độ</ThemedText>
-                      <ThemedText style={styles.secondaryInfoValue}>{userInfo?.miningRate || '0'}/giờ</ThemedText>
+                      <ThemedText style={styles.secondaryInfoValue}>{user?.miningRate || '0'}/giờ</ThemedText>
                     </View>
                   </View>
 
@@ -396,12 +385,14 @@ export default function HomeScreen() {
                        <ThemedText style={styles.secondaryInfoLabel}>Mã mời</ThemedText>
                        <View style={styles.referralCodeInnerBox}> 
                          <ThemedText style={styles.secondaryInfoValue} numberOfLines={1} ellipsizeMode='tail'>
-                           {userInfo?.referralCode || 'N/A'}
+                           {user?.referralCode || 'N/A'}
                          </ThemedText>
-                         {userInfo?.referralCode && (
+                         {user?.referralCode && (
                            <TouchableOpacity onPress={async () => {
-                             await Clipboard.setStringAsync(userInfo.referralCode);
-                             Alert.alert('Đã sao chép');
+                             if (user.referralCode) {
+                               await Clipboard.setStringAsync(user.referralCode);
+                               Alert.alert('Đã sao chép');
+                             }
                            }} style={styles.copyButtonSmall}>
                               <IconSymbol name="doc.on.doc" size={14} color={Colors[colorScheme ?? 'light'].tint} />
                            </TouchableOpacity>

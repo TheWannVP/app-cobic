@@ -34,7 +34,7 @@ const userService = {
   changePassword: async (currentPassword: string, newPassword: string) => {
     try {
       console.log('Changing password...');
-      const response = await api.post('/user/change-password', {
+      const response = await api.patch('/user/password', {
         currentPassword,
         newPassword
       });
